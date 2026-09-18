@@ -14,6 +14,7 @@
 
 | 你想…… | 看这个 |
 |---|---|
+| **把项目交给另一个 AI 接手** | [`docs/17_ai_handoff.md`](docs/17_ai_handoff.md) |
 | **一分钟搞懂整个系统怎么跑** | [`docs/14_architecture.md`](docs/14_architecture.md) |
 | **在 VS Code 里看代码** | [`docs/15_vscode_guide.md`](docs/15_vscode_guide.md) |
 | 查命令 | [`docs/12_command_cheatsheet.md`](docs/12_command_cheatsheet.md) |

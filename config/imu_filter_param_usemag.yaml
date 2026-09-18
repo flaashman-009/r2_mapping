@@ -1,0 +1,26 @@
+# 实验配置：打开磁力计，给 yaw 一个绝对参考
+#
+# 背景：原配置 use_mag: false，madgwick 的 yaw 只能靠陀螺仪积分，
+# 实测静止漂移 +0.78°/min（建图 20 分钟累计偏 15.6°），
+# 是"地图飘"的主因之一。
+#
+# 本文件用于 A/B 对比测试：
+#   原配置  use_mag: false  →  实测 +0.78°/min
+#   本配置  use_mag: true   →  待测
+#
+# ⚠️ 风险提示：室内有电机、钢结构、电子设备，磁干扰很强。
+#    磁力计有可能比陀螺仪漂得更厉害。必须用 imu_drift.py 实测后再决定。
+#    而且静止测试时电机是停的，实际行驶中（电机转起来）干扰会更大，
+#    所以静止测试"变好"不代表上路一定好。
+#
+# 回滚：把 use_mag 改回 false 即可，原文件已备份为
+#       imu_filter_param.yaml.bak
+
+imu_filter_madgwick:
+    ros__parameters:
+        fixed_frame: "base_link"
+        use_mag: true
+        publish_tf: false
+        world_frame: "enu"
+        orientation_stddev: 0.1
+

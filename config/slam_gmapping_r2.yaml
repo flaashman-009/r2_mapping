@@ -1,0 +1,96 @@
+# R2 专用 gmapping 参数（在厂参数基础上针对"地图飘"做的修正）
+#
+# 原厂文件：/home/jetson/yahboomcar_ros2_ws/software/library_ws/install/
+#           slam_gmapping/share/slam_gmapping/params/slam_gmapping.yaml
+#
+# 改动的四类，每一类都对应一个实测到的问题：
+#
+#   1. 里程计偏航误差 ~1.7°/s  → 降低对里程计旋转的信任（str / stt）
+#   2. 关键帧太稀疏（1 m 一帧）→ linearUpdate / angularUpdate / temporalUpdate
+#   3. 只用 4 m 内特征         → maxUrange / maxRange
+#   4. 地图框只有 ±10 m        → xmin/xmax/ymin/ymax
+#
+# 只改这一份，不动原厂安装目录里的文件。
+
+/slam_gmapping:
+  ros__parameters:
+    # ---- 坐标系 ----
+    base_frame: base_footprint
+    map_frame: map
+    odom_frame: odom
+
+    # ---- 地图 ----
+    delta: 0.05                     # 栅格分辨率 5 cm
+    map_update_interval: 2.0        # 5.0 -> 2.0，出图更快，方便实时看漂没漂
+    # 原厂 ±10 m（19.2×19.2 m）。场地大就会被切掉。
+    # 注意：范围越大 gmapping 内存和 CPU 越高，按实际场地调。
+    xmin: -30.0
+    xmax: 30.0
+    ymin: -30.0
+    ymax: 30.0
+
+    # ---- 关键帧触发（本次改动重点）----
+    # 原厂 linearUpdate: 1.0 —— 走满 1 米才处理一帧扫描，
+    # 这 1 米里如果车转了弯，这一帧的初始位姿误差就已经很大了，
+    # 是地图在转弯处"拧"的直接原因之一。
+    linearUpdate: 0.3
+    # 原厂 0.5 rad（28.6°）才更新一帧，转弯处丢特征。降到 0.2 rad（11.5°）
+    angularUpdate: 0.2
+    # 原地不动时也至少每 0.5 s 处理一帧（原厂 1.0 s）
+    temporalUpdate: 0.5
+
+    # ---- 激光量程 ----
+    # 原厂 maxUrange: 4.0，只用 4 米内的点做匹配。室内大房间特征不够。
+    # TG30 实际有效室内距离约 12 m。
+    maxUrange: 12.0
+    maxRange: 12.0
+
+    # ---- 粒子滤波 ----
+    # 原厂 30，收敛慢。粒子越多越稳，代价是 CPU。
+    particles: 60
+    resampleThreshold: 0.5
+
+    # ---- 里程计噪声模型（本次改动重点）----
+    # 这台车的轮式里程计有系统性偏差：落地直行时右后轮比左后轮快
+    # 1.6%-2.6%，差速模型算出来就是 ~1.7°/s 的假偏航。
+    #
+    # gmapping 的运动模型是：
+    #   srr: 平移 -> 平移噪声
+    #   srt: 旋转 -> 平移噪声
+    #   str: 平移 -> 旋转噪声   ← 我们的问题在这一点上
+    #   stt: 旋转 -> 旋转噪声
+    #
+    # str 调大 = 告诉 SLAM"车直行时不要相信里程计报的旋转"，
+    # 让它更多依赖激光匹配。这是针对本车最直接的一处修正。
+    srr: 0.2
+    srt: 0.2
+    str: 0.35
+    stt: 0.4
+
+    # ---- 扫描匹配 ----
+    sigma: 0.05
+    kernelSize: 1
+    lstep: 0.05
+    astep: 0.05
+    # 迭代次数 5 -> 10，扫描匹配更充分
+    iterations: 10
+    lsigma: 0.075
+    ogain: 3.0
+    lskip: 0
+
+    # 原厂 0.0 = 接受任何匹配结果，包括明显错的。
+    # 调高可以拒掉坏匹配（减少重影），但太高会导致地图不更新。
+    # 先留 0，如果还有重影再逐步调到 50-150 试。
+    minimum_score: 0.0
+
+    lasamplerange: 0.005
+    lasamplestep: 0.005
+    llsamplerange: 0.01
+    llsamplestep: 0.01
+
+    # ---- 占据概率 ----
+    occ_thresh: 0.25
+
+    # ---- 其他 ----
+    transform_publish_period: 0.05
+    use_sim_time: false

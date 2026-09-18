@@ -1,0 +1,44 @@
+# LiDAR 外参：base_link -> laser
+#
+# ⚠️ 当前是占位值，尚未标定。标定流程见 docs/03_tf_and_extrinsics.md。
+#    标定前建图，地图会整体旋转或偏移。
+#
+# 标定完成后：
+#   1. 把下面的值填进去（去掉 null）；
+#   2. 写回 URDF 的 <origin xyz rpy>，或
+#   3. 用 launch 参数临时覆盖：
+#      ros2 launch r2_mapping_bringup mapping.launch.py \
+#        publish_lidar_tf:=true \
+#        lidar_x:=... lidar_y:=... lidar_z:=... lidar_yaw:=...
+
+parent_frame: base_link
+child_frame: laser
+
+# 单位：米
+translation:
+  x: null        # 车体中心向前到 LiDAR 光心，前为正
+  y: null        # 左为正
+  z: 0.185       # 地面/基准面到 LiDAR 光心的竖直距离（暂用估值）
+
+# 单位：弧度
+rotation:
+  roll: 0.0
+  pitch: 0.0
+  yaw: null      # LiDAR 0° 方向与车头方向的夹角，逆时针为正
+
+# 标定记录（每次标定后追加，便于回溯）
+calibration_log: []
+#  - date: "YYYY-MM-DD"
+#    method: "RViz 对墙 + 90° 交叉验证"
+#    x: 0.0
+#    y: 0.0
+#    yaw: 0.0
+#    residual_m: 0.0
+#    residual_deg: 0.0
+#    operator: ""
+
+validation:
+  # 验收门槛，见 docs/01_acceptance_criteria.md A6
+  max_position_error_m: 0.05
+  max_angle_error_deg: 2.0
+

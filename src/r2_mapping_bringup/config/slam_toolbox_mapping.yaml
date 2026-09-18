@@ -1,0 +1,107 @@
+# slam_toolbox online async 建图参数（Yahboom R2 阿克曼 + YDLIDAR 10Hz）
+#
+# 用法：async_slam_toolbox_node + 本文件
+#   ros2 launch <path>/mapping_slam_toolbox.launch.py
+#
+# ⚠️ 不要把这个文件换成 /opt/ros/humble/share/slam_toolbox/config/
+#    mapper_params_online_sync.yaml —— sync 参数配 async 节点会静默错配。
+#
+# 为什么从 gmapping 换到 slam_toolbox（2026-09-14）：
+#   场地已经到 28 x 33 m。gmapping 是粒子滤波，**没有显式回环检测**，
+#   靠"走回旧区域时匹配分数够高"偶然闭合；长走廊特征重复就认不出来，
+#   实测地图上出现了相距 0.30 m 的平行双线（同一堵墙建了两遍）。
+#   slam_toolbox 是图优化 + 显式回环检测（Cerès 求解位姿图），
+#   这个尺寸才合适。
+#
+# 调参顺序（先别动 correlation_* ）：
+#   1. 先把里程计标尺（linear_scale_x）、LiDAR 外参、时间同步搞定
+#   2. 再动 minimum_travel_distance / minimum_travel_heading
+#   3. 最后才动 correlation_search_space_* 和 loop_* 系列
+
+slam_toolbox:
+  ros__parameters:
+    # ---- 求解器 ----
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ---- 坐标系 ----
+    # base_frame 需要与车上实际 TF 根一致；原厂 R2 用 base_footprint。
+    # 若 tf2_echo odom base_footprint 查不到而 odom base_link 可以，改成 base_link。
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+
+    # ---- 输入 ----
+    # 用滤波后的扫描：车体自遮挡（车尾左右角，0.15-0.35 m）已经滤掉，
+    # 避免假障碍被写进地图、干扰 scan matching。
+    scan_topic: /scan_filtered
+    mode: mapping
+    debug_logging: false
+    throttle_scans: 1
+    use_sim_time: false
+
+    # ---- 地图输出 ----
+    resolution: 0.05
+    map_update_interval: 2.0
+    # 发布 map->odom 的频率；0.02 s 约 50 Hz，定位复测时 AMCL 会给自己的。
+    transform_publish_period: 0.02
+    transform_timeout: 0.2
+    # 大场地一次建图可能 20-30 分钟，TF 缓存留长一点
+    tf_buffer_duration: 60.0
+
+    # ---- 激光量程 ----
+    # YDLIDAR TG30 标称 30 m，但室内拉满会把噪声也当特征。
+    # 室内场地建议 10-12 m；户外空旷可调到 20。
+    max_laser_range: 12.0
+    minimum_time_interval: 0.2
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 12.0
+
+    # ---- 关键帧触发条件（阿克曼低速建图的重点）----
+    # 走 0.2 m 或转 0.2 rad(≈11.5°) 才处理一帧。
+    # 值太小 -> 特征过多、CPU 爆炸、容易失配；值太大 -> 转弯处丢特征。
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+
+    # ---- 扫描匹配 ----
+    use_scan_matching: true
+    use_scan_barycenter: true
+    link_match_minimum_response_fine: 0.1
+    link_scan_maximum_distance: 1.5
+    do_loop_closing: true
+    # 原 3.0。场地大了，回环搜索半径放宽到 5 m
+    loop_search_maximum_distance: 5.0
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+
+    # ---- 相关性搜索空间 ----
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+
+    # ---- 闭环搜索空间 ----
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # ---- 位姿惩罚项 ----
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+    # ---- 交互式模式 ----
+    # true 时可以在 RViz 的 SlamToolboxPlugin 里手动圈定/暂停建图区域，
+    # 遥控建图用不到，但排查问题时很方便。
+    enable_interactive_mode: false
+    stack_size_to_use: 40000000

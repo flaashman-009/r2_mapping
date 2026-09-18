@@ -1,0 +1,62 @@
+# Yahboom R2 车辆实测参数
+#
+# 数据来源：2026-08-27 / 08-28 / 08-29 实车测试
+# （见 docs/06_test_log.md）
+#
+# 本文件是「记录」不是「运行时参数」，改这里不会自动影响 bringup。
+# 真正的运行时参数在 src/r2_mapping_bringup/config/。
+
+vehicle:
+  name: yahboom_rosmaster_r2
+  drive_type: ackermann
+  ros_domain_id: 28
+  robot_type: r2
+
+geometry:
+  wheel_base_l_m: 0.2681      # 轴距（实测）
+  track_d_m: 0.1646           # 轮距（实测）
+  length_m: 0.3375
+  width_m: 0.1911
+  mass_kg: 2.5
+  max_steer_deg: 45.0         # 实测 ±45°
+  max_steer_rad: 0.7854
+  steer_ratio: 1.000          # 指令角 -> 实际角
+  steer_trim_deg: -2.9        # 直行微调（历史标定值）
+  steer_zero_bias_deg: 0.0
+
+dynamics:                     # 后轮架起实测
+  first_response_delay_s: 0.11
+  rise_time_90pct_s: 0.60
+  max_accel_mps2: 0.7
+  steady_speed_scale: 1.0     # 指令 0.5 m/s -> 实际 0.50-0.51 m/s
+  safe_max_speed_mps: 1.8
+  mapping_speed_mps: 0.3      # 建图建议速度
+
+sensors:
+  lidar:
+    topic: /scan
+    rate_hz: 10.0
+    port: /dev/ydlidar
+    baudrate: 512000
+  imu:
+    raw_topic: /imu/data_raw
+    yaw_topic: /imu/yaw_deg
+    rate_hz: 10.0
+  odom:
+    raw_topic: /odom_raw
+    rate_hz: 10.0
+
+serial:
+  chassis_port: /dev/myserial
+  chassis_baudrate: 115200
+  speech_port: /dev/myspeech
+  vendor_id: "1a86"
+  product_id_chassis: "7523"
+  product_id_speech: "7522"
+
+known_issues:
+  - "odom_raw 的 yaw 是轮速死推算，不可用于航向（EKF 里必须置零权重）"
+  - "imu/yaw_deg 跨 ±180° 会 360° 跳变，下游需要 unwrap"
+  - "cmd_vel.linear.y = 0 不会回正，回中需要发非零小角度"
+  - "落地直行时右后轮约快 1.6%-2.6%，会导致轻微左偏"
+

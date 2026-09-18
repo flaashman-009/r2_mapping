@@ -1,0 +1,29 @@
+# nav2_map_server 参数
+#
+# yaml_filename 由 localization.launch.py 用 map:= 覆盖。
+
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: ""
+    topic_name: map
+    frame_id: map
+
+    # 加载失败时的行为
+    # 0 = RESOURCE_UNAVAILABLE 直接退出（推荐，问题显式暴露）
+    # 1 = RESOURCE_RETRIABLE 反复重试
+    # 2 = RESOURCE_OK 不处理
+    # 3 = RESOURCE_ALREADY_OPEN
+    # 这里保持默认（重试），这样硬件 bringup 慢一点也能等到地图加载成功。
+
+map_saver:
+  ros__parameters:
+    use_sim_time: false
+    save_map_timeout: 5.0
+    # 0.196 而不是 0.25：
+    # unknown 格的灰度是 205，占据概率 (255-205)/255 = 0.196；
+    # 一旦 free_thresh > 0.196，unknown 会被判成 free，地图上会凭空多出
+    # 一大片「可通行区域」。验收标准里的比例统计也会因此失真。
+    free_thresh_default: 0.196
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: true

@@ -1,0 +1,26 @@
+# 这个工程要同时存在于 Windows 和 Linux（虚拟机 + 小车），
+# 所以必须锁定行尾 —— 否则 shell 脚本被转成 CRLF 之后，
+# 在 Linux 上会报 "bad interpreter: /bin/bash^M"，直接跑不起来。
+#
+# text=auto 让 git 自动识别文本文件；eol=lf 强制检出时用 LF。
+
+* text=auto eol=lf
+
+# 明确指定这些类型（防止被误判成二进制）
+*.sh        text eol=lf
+*.py        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.rviz      text eol=lf
+*.xml       text eol=lf
+*.txt       text eol=lf
+*.msg       text eol=lf
+
+# 二进制文件不要做行尾转换
+*.pgm       binary
+*.png       binary
+*.jpg       binary
+*.db3       binary
+*.mcap      binary
+*.pdf       binary

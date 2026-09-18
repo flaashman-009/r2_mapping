@@ -1,0 +1,33 @@
+# colcon
+build/
+install/
+log/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ros
+*.bag
+
+# 数据文件默认不入库，需要时手动 add -f
+bags/*.db3
+bags/*.mcap
+bags/*.yaml
+maps/*.pgm
+maps/*.png
+maps/*.posegraph
+maps/*.data
+
+# 行车记录仪产生的数据（每次跑都会长大，不进代码仓库）
+# 需要保留某一次的话： git add -f logs/nav_watch_xxxx.csv
+logs/*.csv
+logs/*.png
+logs/*.txt
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

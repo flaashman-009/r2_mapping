@@ -1,0 +1,521 @@
+amcl:
+  ros__parameters:
+    use_sim_time: false
+    alpha1: 0.1
+    alpha2: 0.1
+    alpha3: 0.3
+    alpha4: 0.3
+    alpha5: 0.1
+    base_frame_id: base_footprint
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    global_frame_id: map
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    # 2026-09-16 修：原来写 100.0，而实际雷达量程只有 50 m、有效回波 ~6 m。
+    # 值太大等于"什么都当有效"，远处的假回波会拉低正确位姿的权重。
+    laser_max_range: 12.0
+    laser_min_range: -1.0
+    laser_model_type: likelihood_field
+    # 2026-09-16 修：雷达 2020 个光束只抽 60 根，似然场太稀。
+    # 长走廊+稀疏地图下，抽得太少会让粒子权重区分不开。
+    # 2026-09-18 修：180 → 360。从 2020 根光束里抽得越多，
+    # 长走廊那种"似然场平坦"的方向约束越强，位姿越不容易滑。
+    # 代价是 CPU 略升，Jetson 完全吃得下。
+    max_beams: 360
+    max_particles: 4000
+    min_particles: 1000
+    odom_frame_id: odom
+    pf_err: 0.05
+    pf_z: 0.99
+    # 2026-09-18 调低：这两个参数控制 AMCL"随机撒粒子自救"的灵敏度。
+    # 匹配质量短期骤降时（w_fast << w_slow），AMCL 会撒随机粒子找位置；
+    # 撒多了，某个错误位置碰巧得分高，整个位姿就被拽走 ——
+    # 实测 30~40 米的瞬移都是这么来的。
+    # 调小 = 更信运动模型、不容易跳走（代价：真跟丢时恢复慢一点）。
+    recovery_alpha_fast: 0.05
+    recovery_alpha_slow: 0.0005
+    resample_interval: 1
+    robot_model_type: nav2_amcl::DifferentialMotionModel
+    save_pose_rate: 0.5
+    sigma_hit: 0.2
+    tf_broadcast: true
+    transform_tolerance: 0.25
+    # 2026-09-18 修：这是本次最关键的一条。
+    #
+    # AMCL 每收到一帧激光，先看"从上次更新到现在车移动了多少"：
+    #     小于门槛  →  跳过，不跑粒子滤波
+    #     大于等于  →  才更新一次
+    #
+    # 实测（9-18 记录 t=256~261s）：车慢慢倒车 0.34 米，按原来 0.05 米的
+    # 门槛会更新约 7 次；每一次更新都是在"似然场平坦"的长走廊里滑一点的
+    # 机会，7 次累加下来位姿滑了 3.9 米 —— 这就是"到点前很准、
+    # 减速/停下就不准"的原因。
+    #
+    # 改成 0.15 米后，同样的 0.34 米只会触发 2 次更新，滑移机会减少约 70%；
+    # 车完全静止时（里程计不变）一次都不会更新，所以不需要手动停导航。
+    update_min_a: 0.10
+    update_min_d: 0.15
+    z_hit: 0.5
+    z_max: 0.05
+    z_rand: 0.5
+    z_short: 0.05
+    # 2026-09-16 修：必须和建图用同一份扫描。
+    # 地图是 /scan_filtered 建的（屏蔽了车尾 ±120–150° 车体自遮挡），
+    # 原来 AMCL 读原始 /scan，带着 144 个车身近点，车一转就污染匹配。
+    scan_topic: scan_filtered
+    # ================================================================
+    # 2026-09-16 新增：启动时自动设初始位姿
+    #
+    # 为什么必须加：
+    #   AMCL 在收到初始位姿之前**不会发布 map->odom**，而没有这条 TF，
+    #   `map` 坐标系在 TF 树里就不存在。RViz 的固定坐标系是 map，
+    #   固定坐标系不存在时 RViz **整个画面什么都不渲染** ——
+    #   于是"一键启动后 RViz 里看不到 room_04 的地图"，
+    #   而且连点 2D Pose Estimate 都得盲点。
+    #
+    #   加上 set_initial_pose 之后，AMCL 一起来就用下面的位姿发布
+    #   map->odom，地图立刻可见。建图是从 (0,0,0) 开始的，所以
+    #   默认值取原点；车不在原点时再用 RViz 的 2D Pose Estimate 修正。
+    # ================================================================
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+amcl_map_client:
+  ros__parameters:
+    use_sim_time: false
+amcl_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+bt_navigator:
+  ros__parameters:
+    use_sim_time: false
+    global_frame: map
+    robot_base_frame: base_footprint
+    odom_topic: /odom
+    plugin_lib_names:
+    - nav2_compute_path_to_pose_action_bt_node
+    - nav2_compute_path_through_poses_action_bt_node
+    - nav2_smooth_path_action_bt_node
+    - nav2_follow_path_action_bt_node
+    - nav2_assisted_teleop_action_bt_node
+    - nav2_back_up_action_bt_node
+    - nav2_drive_on_heading_bt_node
+    - nav2_clear_costmap_service_bt_node
+    - nav2_is_stuck_condition_bt_node
+    - nav2_goal_reached_condition_bt_node
+    - nav2_goal_updated_condition_bt_node
+    - nav2_globally_updated_goal_condition_bt_node
+    - nav2_is_path_valid_condition_bt_node
+    - nav2_initial_pose_received_condition_bt_node
+    - nav2_reinitialize_global_localization_service_bt_node
+    - nav2_rate_controller_bt_node
+    - nav2_distance_controller_bt_node
+    - nav2_speed_controller_bt_node
+    - nav2_truncate_path_action_bt_node
+    - nav2_truncate_path_local_action_bt_node
+    - nav2_goal_updater_node_bt_node
+    - nav2_recovery_node_bt_node
+    - nav2_pipeline_sequence_bt_node
+    - nav2_round_robin_node_bt_node
+    - nav2_transform_available_condition_bt_node
+    - nav2_time_expired_condition_bt_node
+    - nav2_path_expiring_timer_condition
+    - nav2_distance_traveled_condition_bt_node
+    - nav2_single_trigger_bt_node
+    - nav2_goal_updated_controller_bt_node
+    - nav2_is_battery_low_condition_bt_node
+    - nav2_navigate_through_poses_action_bt_node
+    - nav2_navigate_to_pose_action_bt_node
+    - nav2_remove_passed_goals_action_bt_node
+    - nav2_planner_selector_bt_node
+    - nav2_controller_selector_bt_node
+    - nav2_goal_checker_selector_bt_node
+    - nav2_controller_cancel_bt_node
+    - nav2_path_longer_on_approach_bt_node
+    - nav2_back_up_cancel_bt_node
+    - nav2_assisted_teleop_cancel_bt_node
+    - nav2_drive_on_heading_cancel_bt_node
+    - nav2_is_battery_charging_condition_bt_node
+bt_navigator_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    # 2026-09-15 修正拼写：原来写成了 ontroller_frequency（少一个 c），
+    # 这个参数一直没生效（幸好 nav2 默认值也是 20.0，所以没造成影响）。
+    # 2026-09-17 修：20 → 10 Hz。控制器每个周期都会重新优化轨迹，
+    # 频率减半能直接降低转向指令的抖动频率（"左右打方向"的来源）。
+    controller_frequency: 10.0
+    min_x_velocity_threshold: 0.001
+    # 2026-09-16 修：原来 0.2，而 linear.y 的满量程只有 ±0.05（±45°）。
+    # 阈值比满量程还大 = 任何 linear.y 都会被当成 0 抹掉。
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    progress_checker_plugin: progress_checker
+    goal_checker_plugin: goal_checker
+    controller_plugins:
+    - FollowPath
+    progress_checker:
+      plugin: nav2_controller::SimpleProgressChecker
+      required_movement_radius: 0.5
+      movement_time_allowance: 6.0
+    goal_checker:
+      plugin: nav2_controller::SimpleGoalChecker
+      # 2026-09-17 放宽：阿克曼车到不了"原地转"，收尾阶段只能前后挪着凑，
+      # 容差太紧会表现为原地反复修方向。
+      xy_goal_tolerance: 0.30
+      yaw_goal_tolerance: 0.35
+      stateful: true
+    # ==================================================================
+    # TEB 局部控制器 —— 2026-09-16 大改
+    #
+    # 原来这一段只有 22 个参数，而且**缺全部阿克曼约束**，等于把阿克曼车
+    # 当差速车在规划：它能算出"原地转"或"转弯半径极小"的轨迹，车根本
+    # 执行不了，于是控制器一次次重规划、前轮反复打到满舵。
+    # ==================================================================
+    FollowPath:
+      plugin: teb_local_planner::TebLocalPlannerROS
+
+      # 车辆几何：车长 0.3375 × 宽 0.1911 m（实测）。
+      # 原来用 r=0.1 的圆，规划器以为车很小，敢贴着墙规划，
+      # 一旦有偏差就得急打方向纠回来。
+      footprint_model.type: polygon
+      footprint_model.vertices: "[[0.17, 0.10], [0.17, -0.10], [-0.17, -0.10], [-0.17, 0.10]]"
+
+      # ---- 阿克曼约束（原来一条都没有，这是"猛打方向"的根源）----
+      wheelbase: 0.2681
+      min_turning_radius: 0.28          # L/tan(44°)≈0.277，不许规划更小的弯
+      weight_kinematics_turning_radius: 5.0
+      weight_kinematics_forward_drive: 10.0   # 惩罚倒车（避障需要时仍可倒）
+      weight_kinematics_nh: 1000.0      # 非完整约束：车不能横着走
+
+      # ---- 速度限制 ----
+      # max_vel_theta 原来 1.0 rad/s：在 0.23 m/s 下换算出的转向角是
+      # atan(1.0×0.268/0.23)=49°，已经超过 44° 机械极限 → 前轮顶死在满舵。
+      # 降到 0.6 后只需 35°，留出余量。
+      max_vel_x: 0.23
+      min_vel_x: -0.10                  # 留一点倒车能力（避障恢复要用）
+      # 2026-09-17：0.6 → 0.45。转向幅度再收一档，配合适配节点的
+      # 转速率限制和死区，让"左右打方向"进一步减少。
+      max_vel_theta: 0.45
+      min_vel_theta: -0.45
+      acc_lim_x: 0.7                    # 实测最大加速度约 0.7 m/s^2
+      acc_lim_theta: 0.6                # 原来 3.2，等于完全不限转向加速度
+
+      # ---- 轨迹与障碍 ----
+      min_obstacle_dist: 0.15
+      inflation_dist: 0.25
+      weight_obstacle: 50.0
+      weight_optimaltime: 1.0
+      max_global_plan_lookahead_dist: 1.5
+
+      # ---- 拓扑规划 ----
+      # 开着它会同时优化"绕障碍从左还是从右"多条轨迹，算力大，
+      # 而且在阿克曼车上容易选来选去（表现为方向犹豫）。关掉。
+      enable_homotopy_class_planning: false
+      enable_multithreading: true
+      optimization_verbose: false
+      teb_autoresize: true
+      min_samples: 3
+      max_samples: 20
+      visualize_hc_graph: false
+
+      costmap_converter_plugin: costmap_converter::CostmapToPolygonsDBSMCCH
+      costmap_converter_spin_thread: true
+      costmap_converter_rate: 20
+costmap_converter:
+  ros__parameters:
+    use_sim_time: false
+controller_server_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: false
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_footprint
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      # 2026-09-16：车实际 0.3375×0.1911 m，原来的 r=0.1 圆太小，
+      # 规划器会贴着障碍物走。改成真实矩形（footprint 优先于 robot_radius）。
+      footprint: "[[0.17, 0.10], [0.17, -0.10], [-0.17, -0.10], [-0.17, 0.10]]"
+      footprint_padding: 0.02
+      robot_radius: 0.1
+      plugins:
+      - obstacle_layer
+      - inflation_layer
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.2
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan_filtered
+          max_obstacle_height: 2.0
+          # 0.23 -> 0.40：R2 的 LiDAR 能扫到车尾左右两个角，
+          # 实测近点分布在 0.148-0.35 m。原来 0.23 的近场截断挡不住，
+          # 结果在车自己身上标出致命障碍 —— 全局规划器从致命格出发，
+          # 规划必然失败（GridBased: failed to create plan），
+          # 倒车恢复也会报 "Collision Ahead"。
+          obstacle_min_range: 0.40
+          clearing: true
+          marking: true
+          data_type: LaserScan
+      voxel_layer:
+        plugin: nav2_costmap_2d::VoxelLayer
+        enabled: true
+        publish_voxel_map: true
+        origin_z: 0.0
+        z_resolution: 0.2
+        z_voxels: 10
+        max_obstacle_height: 2.0
+        mark_threshold: 0
+        observation_sources: pointcloud
+        pointcloud:
+          topic: /intel_realsense_r200_depth/points
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: PointCloud2
+      static_layer:
+        map_subscribe_transient_local: true
+      always_send_full_costmap: true
+local_costmap_client:
+  ros__parameters:
+    use_sim_time: false
+local_costmap_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: false
+      footprint_padding: 0.03
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      footprint: "[[0.17, 0.10], [0.17, -0.10], [-0.17, -0.10], [-0.17, 0.10]]"
+      footprint_padding: 0.02
+      robot_radius: 0.1
+      resolution: 0.05
+      plugins:
+      - static_layer
+      - obstacle_layer
+      - inflation_layer
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        footprint_clearing_enabled: true
+        max_obstacle_height: 2.0
+        combination_method: 1
+        scan:
+          topic: /scan_filtered
+          obstacle_range: 3.0
+          # 同全局代价地图：滤掉车体自遮挡的近点
+          obstacle_min_range: 0.40
+          raytrace_range: 4.0
+          max_obstacle_height: 1.0
+          min_obstacle_height: 0.0
+          clearing: true
+          marking: true
+          data_type: LaserScan
+          inf_is_valid: false
+      voxel_layer:
+        plugin: nav2_costmap_2d::VoxelLayer
+        enabled: true
+        footprint_clearing_enabled: true
+        max_obstacle_height: 2.0
+        publish_voxel_map: true
+        origin_z: 0.0
+        z_resolution: 0.05
+        z_voxels: 16
+        unknown_threshold: 15
+        mark_threshold: 0
+        observation_sources: pointcloud
+        combination_method: 1
+        pointcloud:
+          topic: /intel_realsense_r200_depth/points
+          max_obstacle_height: 2.0
+          min_obstacle_height: 0.0
+          obstacle_range: 2.5
+          raytrace_range: 3.0
+          clearing: true
+          marking: true
+          data_type: PointCloud2
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_subscribe_transient_local: true
+        nabled: true
+        subscribe_to_updates: true
+        transform_tolerance: 0.1
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        enabled: true
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.2
+        inflate_unknown: false
+        inflate_around_unknown: true
+      always_send_full_costmap: true
+global_costmap_client:
+  ros__parameters:
+    use_sim_time: false
+global_costmap_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: yahboomcar.yaml
+map_saver:
+  ros__parameters:
+    use_sim_time: false
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: true
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0
+    use_sim_time: false
+    planner_plugins:
+    - GridBased
+    GridBased:
+      plugin: nav2_navfn_planner/NavfnPlanner
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true
+planner_server_rclcpp_node:
+  ros__parameters:
+    use_sim_time: false
+behavior_server:
+  ros__parameters:
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins:
+    - backup
+    backup:
+      plugin: nav2_behaviors/BackUp
+      # 2026-09-16 修：原来 -1.0 m/s，是前进最大速度(0.23)的 4 倍多。
+      # 卡住时恢复行为会猛倒 1.5 米，阿克曼还带着转向角，非常危险。
+      backup_speed: -0.15
+      backup_duration: 2.0
+      simulate_ahead_time: 2.0
+    global_frame: odom
+    robot_base_frame: base_footprint
+    transform_timeout: 0.1
+    use_sim_time: false
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 3.2
+robot_state_publisher:
+  ros__parameters:
+    use_sim_time: false
+waypoint_follower:
+  ros__parameters:
+    loop_rate: 20
+    stop_on_failure: false
+    waypoint_task_executor_plugin: wait_at_waypoint
+    wait_at_waypoint:
+      plugin: nav2_waypoint_follower::WaitAtWaypoint
+      enabled: true
+      waypoint_pause_duration: 200
+
+# ============================================================
+# 2026-09-15 新增：velocity_smoother 配置
+#
+# 为什么必须加这一段：
+#   这台车的**转向走 linear.y**（不是标准的 angular.z）。
+#   Nav2 velocity_smoother 的默认值是：
+#       max_velocity: [0.5, 0.0, 2.5]
+#       min_velocity: [-0.5, 0.0, -2.5]
+#                       x    y   theta
+#   第二项（y）是 0 —— 而 scale_velocities 默认 false 表示"夹断"而非缩放。
+#
+#   实测验证（scripts/test_smoother.sh）：
+#       往 /cmd_vel_nav 发 linear.y = 0.02（20° 转向）
+#       平滑后 /cmd_vel 收到 127 条，**全是 0.0**
+#   → 转向指令被整个吃掉，控制器发出的转向永远到不了底盘。
+#
+#   后果：车不按规划路径走，TEB 以为发了转向却没生效，于是不停修正，
+#         表现为前轮"一直在修方向"（F1 暖胎）。
+#
+# 修法：把 y 分量的上下限放开，覆盖实际转向范围
+#   （linear.y = 转角(deg)/1000，±0.05 = ±50°，略大于最大 45°）
+# ============================================================
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: OPEN_LOOP
+    #         x      y(转向)  theta(R2 不用)
+    max_velocity: [0.30,  0.05,  0.0]
+    min_velocity: [-0.30, -0.05, 0.0]
+    deadband_velocity: [0.0, 0.0, 0.0]
+    odom_topic: odom
+    odom_duration: 0.1
+    velocity_timeout: 1.0
+
+
+# ======================================================================
+# 转向适配节点 cmd_vel_ackermann  —— 2026-09-18 从 launch 挪到这里
+#
+# 为什么要挪：以前这些限幅写在 navigation_r2.launch.py 的启动参数里，
+# 而 Nav2/AMCL 的参数在 nav_r2.yaml，改一个限幅要翻两个文件。
+# 现在统一：**所有转向相关的限幅都在这一段改**。
+#
+# 背景（2026-09-16 实测）：这台车底盘把 angular.z=0 当成"不更新转向"，
+# 所以 Nav2 说"直行"时前轮会保持上次角度、车在画弧。本节点改成自己按
+# 阿克曼模型算转向角，走 linear.y（值×1000=度）这条直接通道。
+# ======================================================================
+cmd_vel_ackermann:
+  ros__parameters:
+    # 车体几何：实测轴距
+    wheelbase: 0.2681
+
+    # 转向角限幅（度）。机械极限是 44°，留 4° 余量。
+    max_steer_deg: 40.0
+    # 倒车时用更严的限幅：δ=atan(ω·L/|v|)，倒车时 |v| 很小会被放大，
+    # 实测倒车时转向打到 17~35°，是定位崩溃的常见触发点。
+    reverse_steer_deg: 22.0
+
+    # 舵机转速率上限（度/秒）。调小 = 前轮动得更柔和（治"左右打方向"）；
+    # 调大 = 响应快但会抖。原来 70，现在 45。
+    max_steer_rate_dps: 45.0
+    # 转向死区（度）：目标变化小于它就不动，抹掉控制器的微抖动。
+    steer_deadband_deg: 1.5
+
+    # 低于这个车速时不按 atan(ωL/v) 算转向（会除小量爆掉），改为保持
+    min_speed: 0.05
+    # 转向角接近 0 时强制发 ±这个值（固件把 0 当"不更新"）
+    eps_deg: 1.0
+    # 直行微调：标定后填（正数往左）。历史实测值 -2.9，但那是另一套口径，
+    # 先在实车上验证再填，别直接抄。
+    steer_trim_deg: 0.0
+
+    # 话题
+    input_topic: /cmd_vel_nav      # Nav2 的输出
+    output_topic: /cmd_vel         # 底盘驱动听的那个
+    halt_topic: /cmd_vel_halt      # 定位护卫节点用它叫停
+    cmd_timeout: 0.5               # 多久没指令就停车
+    publish_rate: 20.0
+    log_every: 0                   # >0 时每 N 条指令打一行日志（排查用）

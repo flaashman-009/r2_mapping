@@ -11,7 +11,7 @@
 | 主控 | Jetson Orin NX SUPER 16GB，Ubuntu 22.04.5，内核 5.15-tegra |
 | ROS | ROS2 Humble |
 | `ROS_DOMAIN_ID` | 28 |
-| 主机名 / 用户 | `yahboom` / `jetson`（密码 `yahboom`） |
+| 主机名 / 用户 | `yahboom` / `jetson`（密码见本地保管记录，**不要写进仓库**） |
 | 常用 IP | `192.168.43.10` |
 | 车体标识 | `my_robot_type=r2`、`my_lidar=4ROS` |
 
@@ -102,4 +102,3 @@ source /home/jetson/yahboomcar_ros2_ws/yahboomcar_ws/install/setup.bash
 
 `r2_mapping_bringup` 通过 launch 参数 `vendor_launch` 引用它，
 路径可覆盖，方便后续替换成正式的原厂 package。
-

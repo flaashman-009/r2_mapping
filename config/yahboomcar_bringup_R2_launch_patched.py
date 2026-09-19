@@ -13,6 +13,10 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import ExecuteProcess
+
+# 本项目自己的脚本目录（里程计静止门等节点放在这里）
+R2_MAPPING_SCRIPTS = os.path.expanduser('~/r2_mapping/scripts')
 
 
 def generate_launch_description():
@@ -107,6 +111,26 @@ def generate_launch_description():
             '/ekf_x1_x3_launch.py'])
     )
 
+    # ---- 里程计静止门 odom_gate（2026-09-19 新增）----
+    # 为什么必须有：
+    #   车停住时底盘固件不更新转向（前轮卡在最后一次的角度，实测 +19°），
+    #   而 base_node_R2 用 ω = vx·tan(δ)/L 算航向 —— 它拿着这个卡住的转角
+    #   加上停车时轮子的微小往复（vx 有 ±0.1 m/s 级噪声），
+    #   算出持续非零角速度，6 分钟里航向累积了 6.4 圈、位置画了个圆。
+    #   EKF 融合它的 vx，就把这条"螺旋"积分出来 → 漂 31 米。
+    #   结果就是"车停下来，点云突然对不上地图"。
+    #
+    # 这个节点把"车速低于 0.03 m/s"时的 twist 置零，让 EKF 不积分幻影运动。
+    # 它必须和 EKF 一起启动 —— 因为 EKF 的 odom0 已经指向 /odom_gated，
+    # 这个节点不跑，EKF 就收不到里程计，/odom 会完全没有。
+    odom_gate_node = ExecuteProcess(
+        cmd=['python3', os.path.join(R2_MAPPING_SCRIPTS, 'odom_gate.py'),
+             '--ros-args',
+             '-p', 'input_topic:=/odom_raw',
+             '-p', 'output_topic:=/odom_gated'],
+        output='screen'
+    )
+
     # ---- 原厂手柄节点 yahboom_joy_R2：默认关掉 ----
     #
     # 为什么要关（2026-09-14 实测，踩了三次）：
@@ -152,7 +176,8 @@ def generate_launch_description():
         driver_node,
         base_node,
         imu_filter_node,
-        ekf_node,
+    ekf_node,
+    odom_gate_node,
         use_factory_joy_arg,
         yahboom_joy_node,
         joy_node

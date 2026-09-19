@@ -80,7 +80,19 @@ ekf_filter_node:
 # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
 # odom1, twist0, twist1, imu0, imu1, imu2, etc. The value should be the topic name. These parameters obviously have no
 # default values, and must be specified.
-        odom0: /odom_raw
+        # 2026-09-19：改接"里程计静止门"的输出，不是原始 /odom_raw。
+        #
+        # 原因（实测）：车停住时底盘固件不更新转向，前轮卡在最后一次的角度
+        # （实测 +19° 持续 350 秒），而 base_node_R2 用 ω=vx·tan(δ)/L 算航向 ——
+        # 它拿着这个卡住的转角加上停车时轮子的微小往复（vx ±0.1 m/s 噪声），
+        # 算出持续非零角速度：6 分钟里航向累积 6.4 圈、位置画了个圆。
+        # 本 EKF 只融合它的 vx，于是把这条螺旋积分出来 → 漂 31 米 →
+        # AMCL 跟着漂 → 点云对不上地图（"停下来就飘"）。
+        #
+        # odom_gate.py 在车速 < 0.03 m/s 时把 twist 置零，堵住这个漏洞。
+        # ⚠️ 这个节点必须和 EKF 一起启动（已加进硬件 launch），
+        #    否则 EKF 收不到里程计，/odom 会完全没有。
+        odom0: /odom_gated
 
 # Each sensor reading updates some or all of the filter's state. These options give you greater control over which
 # values from each measurement are fed to the filter. For example, if you have an odometry message as input, but only

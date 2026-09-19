@@ -48,6 +48,7 @@ NAV_KILL_PATTERNS=(
   "cmd_vel_[a]ckermann"
   "lost_[w]atchdog"
   "localization_[g]uard"
+  "odom_[g]ate"
   "scan_[f]ilter_node"
   "nav_[w]atch"
   "/opt/ros/humble/lib/nav2_[a]"

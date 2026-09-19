@@ -29,6 +29,12 @@ PATTERNS=(
   joy_node
   slam_gmapping
   scan_filter_node
+  # 里程计静止门。**必须在这里**：它是跟着硬件 launch 一起起的，
+  # 漏掉的话每次重启都会留一个孤儿进程，多个 gate 同时往
+  # /odom_gated 发消息 → EKF 收到重复/冲突的里程计 →
+  # 停车瞬间位姿突变。
+  # 2026-09-19 踩过：攒了 3 个 gate 同时跑，导致"停车瞬间突变"。
+  odom_gate
   # 实验版里程计（替代 base_node_R2 时用）。一起清掉，
   # 保证重启后回到"原厂 base_node_R2 单独发 /odom_raw"的干净状态。
   r2_odom

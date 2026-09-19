@@ -15,12 +15,13 @@ declare -A WANT=(
   ["lifecycle_manager"]=2
   ["cmd_vel_ackermann"]=1
   ["scan_filter_node"]=1
+  ["odom_gate"]=1
 )
 
 bad=0
 for name in amcl controller_server planner_server behavior_server \
             bt_navigator map_server lifecycle_manager \
-            cmd_vel_ackermann scan_filter_node; do
+            cmd_vel_ackermann scan_filter_node odom_gate; do
   # 用 pgrep 按命令行计数；pgrep 不会匹配自己（用 grep -c 会把自己算进去）
   n="$(pgrep -fc "/${name}" 2>/dev/null || echo 0)"
   want="${WANT[$name]}"

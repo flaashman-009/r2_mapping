@@ -61,6 +61,11 @@ class CmdVelAckermann(Node):
         # 这个比值会被放大 —— 实测倒车时转向打到 17~35°，车在小空间里
         # 大幅摆动，扫描剧烈变化，是定位崩溃的常见触发点。
         self.declare_parameter("reverse_steer_deg", 22.0)
+        # 低速时的转向限幅（见下面 _tick 里的说明）。
+        # 为什么需要：δ=atan(ω·L/v)，TEB 的 ω 不随车速减小，
+        # 车一减速 δ 就被放大 → 到达终点前的前轮猛打 → 车急转。
+        self.declare_parameter("low_speed", 0.12)           # m/s
+        self.declare_parameter("low_speed_steer_deg", 20.0)
         self.declare_parameter("max_steer_rate_dps", 45.0)
         self.declare_parameter("steer_deadband_deg", 1.5)
         self.declare_parameter("min_speed", 0.05)
@@ -76,6 +81,8 @@ class CmdVelAckermann(Node):
         self.L = self.get_parameter("wheelbase").value
         self.max_steer = self.get_parameter("max_steer_deg").value
         self.reverse_steer = self.get_parameter("reverse_steer_deg").value
+        self.low_speed = self.get_parameter("low_speed").value
+        self.low_speed_steer = self.get_parameter("low_speed_steer_deg").value
         self.max_rate = self.get_parameter("max_steer_rate_dps").value
         self.deadband = self.get_parameter("steer_deadband_deg").value
         self.min_speed = self.get_parameter("min_speed").value
@@ -164,8 +171,29 @@ class CmdVelAckermann(Node):
         v_out = 0.0 if stop else self.v
         target = 0.0 if stop else self.delta_cmd
 
-        # 倒车时用更严的限幅
-        limit = self.reverse_steer if v_out < -1e-6 else self.max_steer
+        # ---- 转向限幅（分三种情况）----
+        # 2026-09-19 加"低速限幅"，这是修"到终点就飘"的关键一刀。
+        #
+        # 实测：到达终点前必然减速，而 TEB 的 ω 指令不会跟着减小，
+        # 于是 δ = atan(ω·L/v) 被放大：
+        #     v=0.23 → 19°    v=0.15 → 28°    v=0.07 → 49°（被限到 40°）
+        # 实测停车前 2 秒：v 从 0.23 掉到 0.07，前轮从 −1° 猛打到 +39°，
+        # 车在 2 秒内急转 51°（IMU 实测），AMCL 跟不上 → 残差 0.35→0.64
+        # → 表现就是"每次都在终点飘"。
+        #
+        # 低速大转角除了造成急转没有任何好处：0.1 m/s 下 20° 转向
+        # 对应 0.74 m 转弯半径，完全够用。所以让限幅随速度平滑变化：
+        #     v=0        → ±low_speed_steer（默认 20°）
+        #     v≥low_speed → ±max_steer（默认 40°）
+        v_abs = abs(v_out)
+        if v_out < -1e-6:
+            limit = self.reverse_steer                      # 倒车：最严
+        elif v_abs >= self.low_speed:
+            limit = self.max_steer                          # 正常行驶
+        else:
+            f = v_abs / max(1e-6, self.low_speed)           # 0~1 平滑过渡
+            limit = self.low_speed_steer + \
+                (self.max_steer - self.low_speed_steer) * f
         clipped = max(-limit, min(limit, target))
         if abs(clipped - target) > 1e-6:
             self.n_clip += 1
